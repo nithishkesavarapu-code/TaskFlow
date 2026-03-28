@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TaskFlow — Task Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { --accent: #6366f1; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #0f172a; }
+    .glass {
+      background: rgba(30,41,59,0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .badge-pending    { background:#334155; color:#94a3b8; }
+    .badge-in_progress{ background:#1e3a5f; color:#60a5fa; }
+    .badge-completed  { background:#14532d; color:#4ade80; }
+    .badge-cancelled  { background:#450a0a; color:#f87171; }
+    .badge-low        { background:#1e293b; color:#94a3b8; }
+    .badge-medium     { background:#422006; color:#fb923c; }
+    .badge-high       { background:#450a0a; color:#f87171; }
+    .toast { animation: slideIn 0.3s ease; }
+    @keyframes slideIn {
+      from { transform: translateY(20px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+    input,select,textarea {
+      background: #1e293b !important;
+      border-color: #334155 !important;
+      color: #f1f5f9 !important;
+    }
+    input:focus,select:focus,textarea:focus {
+      outline: none;
+      border-color: #6366f1 !important;
+      box-shadow: 0 0 0 2px rgba(99,102,241,0.25) !important;
+    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+  </style>
+</head>
+<body class="min-h-screen text-slate-200">
+
+<div id="toastContainer" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2"></div>
+
+<div id="authScreen" class="min-h-screen flex items-center justify-center p-4">
+  <div class="glass rounded-2xl p-8 w-full max-w-md shadow-2xl">
+    <div class="flex items-center gap-3 mb-8">
+      <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white text-xl font-bold">T</div>
+      <h1 class="text-2xl font-bold text-white">TaskFlow</h1>
+    </div>
+    <div class="flex rounded-lg bg-slate-800 p-1 mb-6">
+      <button id="tabLogin" onclick="switchTab('login')"
+        class="flex-1 py-2 rounded-md text-sm font-medium transition-all bg-indigo-600 text-white">
+        Sign In
+      </button>
+      <button id="tabRegister" onclick="switchTab('register')"
+        class="flex-1 py-2 rounded-md text-sm font-medium transition-all text-slate-400 hover:text-white">
+        Register
+      </button>
+    </div>
+
+    <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-4">
+      <div>
+        <label class="block text-xs text-slate-400 mb-1">Email</label>
+        <input type="email" id="loginEmail" required placeholder="admin@taskflow.com"
+          class="w-full px-3 py-2.5 rounded-lg border text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-slate-400 mb-1">Password</label>
+        <input type="password" id="loginPassword" required placeholder="••••••••"
+          class="w-full px-3 py-2.5 rounded-lg border text-sm" />
+      </div>
+      <button type="submit" id="loginBtn"
+        class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold transition-colors">
+        Sign In
+      </button>
+      <p class="text-xs text-slate-500 text-center">
+        Default admin: admin@taskflow.com / Admin@123
+      </p>
+    </form>
+
+    <form id="registerForm" onsubmit="handleRegister(event)" class="space-y-4 hidden">
+      <div>
+        <label class="block text-xs text-slate-400 mb-1">Full Name</label>
+        <input type="text" id="regName" required placeholder="Jane Doe"
+          class="w-full px-3 py-2.5 rounded-lg border text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-slate-400 mb-1">Email</label>
+        <input type="email" id="regEmail" required placeholder="jane@example.com"
+          class="w-full px-3 py-2.5 rounded-lg border text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-slate-400 mb-1">Password</label>
+        <input type="password" id="regPassword" required placeholder="Min 8 chars, 1 uppercase, 1 number"
+          class="w-full px-3 py-2.5 rounded-lg border text-sm" />
+      </div>
+      <button type="submit"
+        class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold transition-colors">
+        Create Account
+      </button>
+    </form>
+  </div>
+</div>
+
+<div id="dashboard" class="hidden min-h-screen">
+
+  <nav class="glass border-b border-slate-700/50 sticky top-0 z-40">
+    <div class="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-sm">T</div>
+        <span class="font-semibold text-white">TaskFlow</span>
+        <span id="roleBadge" class="px-2 py-0.5 rounded text-xs bg-indigo-900 text-indigo-300 hidden">admin</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <span id="userGreeting" class="text-sm text-slate-400"></span>
+        <button onclick="handleLogout()"
+          class="px-3 py-1.5 text-sm text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg transition-colors">
+          Sign Out
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-6xl mx-auto px-4 py-8">
+
+    <div id="statsRow" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8"></div>
+
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+      <h2 class="text-lg font-semibold text-white">My Tasks</h2>
+      <div class="flex items-center gap-2 flex-wrap">
+        <input id="searchInput" type="text" placeholder="Search tasks…" oninput="debouncedFetch()"
+          class="px-3 py-1.5 rounded-lg border text-sm w-44" />
+        <select id="filterStatus" onchange="fetchTasks()" class="px-3 py-1.5 rounded-lg border text-sm">
+          <option value="">All statuses</option>
+          <option value="pending">Pending</option>
+          <option value="in_progress">In Progress</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <select id="filterPriority" onchange="fetchTasks()" class="px-3 py-1.5 rounded-lg border text-sm">
+          <option value="">All priorities</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+        <button onclick="openModal()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors">
+          + New Task
+        </button>
+      </div>
+    </div>
+
+    <div id="taskList" class="space-y-3"></div>
+
+    <div id="pagination" class="flex items-center justify-between mt-6 text-sm text-slate-400 hidden">
+      <span id="paginationInfo"></span>
+      <div class="flex gap-2">
+        <button id="prevBtn" onclick="changePage(-1)"
+          class="px-3 py-1.5 rounded-lg border border-slate-700 hover:border-slate-500 disabled:opacity-30 transition-colors"
+          disabled>← Prev</button>
+        <button id="nextBtn" onclick="changePage(1)"
+          class="px-3 py-1.5 rounded-lg border border-slate-700 hover:border-slate-500 disabled:opacity-30 transition-colors"
+          disabled>Next →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="taskModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+  <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeModal()"></div>
+  <div class="glass rounded-2xl p-6 w-full max-w-lg relative shadow-2xl">
+    <h3 id="modalTitle" class="text-lg font-semibold text-white mb-5">New Task</h3>
+    <form id="taskForm" onsubmit="handleTaskSubmit(event)" class="space-y-4">
+      <input type="hidden" id="taskId" />
+      <div>
+        <label class="block text-xs text-slate-400 mb-1">Title *</label>
+        <input type="text" id="taskTitle" required maxlength="200" placeholder="What needs to be done?"
+          class="w-full px-3 py-2.5 rounded-lg border text-sm" />
+      </div>
+      <div>
+        <label class="block text-xs text-slate-400 mb-1">Description</label>
+        <textarea id="taskDesc" rows="3" maxlength="2000" placeholder="Optional details…"
+          class="w-full px-3 py-2.5 rounded-lg border text-sm resize-none"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Status</label>
+          <select id="taskStatus" class="w-full px-3 py-2.5 rounded-lg border text-sm">
+            <option value="pending">Pending</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Priority</label>
+          <select id="taskPriority" class="w-full px-3 py-2.5 rounded-lg border text-sm">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs text-slate-400 mb-1">Due Date</label>
+        <input type="date" id="taskDueDate" class="w-full px-3 py-2.5 rounded-lg border text-sm" />
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="button" onclick="closeModal()"
+          class="flex-1 py-2.5 rounded-lg border border-slate-600 text-slate-300 hover:text-white text-sm transition-colors">
+          Cancel
+        </button>
+        <button type="submit" id="taskSubmitBtn"
+          class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors">
+          Create Task
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  const API = 'http://localhost:5000/api/v1';
+  let accessToken   = localStorage.getItem('accessToken')  || '';
+  let refreshToken  = localStorage.getItem('refreshToken') || '';
+  let currentUser   = JSON.parse(localStorage.getItem('currentUser') || 'null');
+  let currentPage   = 1;
+  let totalPages    = 1;
+  let debounceTimer = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  function toast(msg, type = 'success') {
+    const el = document.createElement('div');
+    el.className = `toast px-4 py-3 rounded-xl text-sm font-medium shadow-lg text-white
+      ${type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'}`;
+    el.textContent = msg;
+    $('toastContainer').prepend(el);
+    setTimeout(() => el.remove(), 3500);
+  }
+
+  function setLoading(btnId, loading) {
+    const btn = $(btnId);
+    if (!btn) return;
+    btn.disabled = loading;
+    btn.textContent = loading ? 'Loading…' : btn.dataset.label || btn.textContent;
+  }
+
+  async function apiFetch(endpoint, options = {}) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+
+    const res = await fetch(`${API}${endpoint}`, { ...options, headers });
+
+    if (res.status === 401 && refreshToken) {
+      const refreshed = await tryRefresh();
+      if (refreshed) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+        return fetch(`${API}${endpoint}`, { ...options, headers });
+      } else {
+        handleLogout(true);
+        return null;
+      }
+    }
+    return res;
+  }
+
+  async function tryRefresh() {
+    try {
+      const res = await fetch(`${API}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      accessToken  = data.accessToken;
+      refreshToken = data.refreshToken;
+      localStorage.setItem('accessToken',  accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+      return true;
+    } catch { return false; }
+  }
+
+  function switchTab(tab) {
+    const isLogin = tab === 'login';
+    $('loginForm').classList.toggle('hidden', !isLogin);
+    $('registerForm').classList.toggle('hidden', isLogin);
+    $('tabLogin').className   = `flex-1 py-2 rounded-md text-sm font-medium transition-all
+      ${isLogin ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`;
+    $('tabRegister').className = `flex-1 py-2 rounded-md text-sm font-medium transition-all
+      ${!isLogin ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`;
+  }
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    const email = $('loginEmail').value;
+    const password = $('loginPassword').value;
+    try {
+      const res = await fetch(`${API}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) return toast(data.message || 'Login failed', 'error');
+      saveSession(data);
+      showDashboard();
+      toast(`Welcome back, ${data.user.name}!`);
+    } catch { toast('Network error — is the server running?', 'error'); }
+  }
+
+  async function handleRegister(e) {
+    e.preventDefault();
+    const name = $('regName').value;
+    const email = $('regEmail').value;
+    const password = $('regPassword').value;
+    try {
+      const res = await fetch(`${API}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = data.errors ? data.errors.map(e => e.message).join(', ') : data.message;
+        return toast(msg, 'error');
+      }
+      saveSession(data);
+      showDashboard();
+      toast(`Welcome to TaskFlow, ${data.user.name}!`);
+    } catch { toast('Network error', 'error'); }
+  }
+
+  function saveSession(data) {
+    accessToken  = data.accessToken;
+    refreshToken = data.refreshToken;
+    currentUser  = data.user;
+    localStorage.setItem('accessToken',  accessToken);
+    localStorage.setItem('refreshToken', refreshToken);
+    localStorage.setItem('currentUser',  JSON.stringify(currentUser));
+  }
+
+  async function handleLogout(silent = false) {
+    try {
+      await apiFetch('/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({ refreshToken }),
+      });
+    } catch {}
+    accessToken = refreshToken = '';
+    currentUser = null;
+    localStorage.clear();
+    $('authScreen').classList.remove('hidden');
+    $('dashboard').classList.add('hidden');
+    if (!silent) toast('Signed out successfully');
+  }
+
+  function showDashboard() {
+    $('authScreen').classList.add('hidden');
+    $('dashboard').classList.remove('hidden');
+    $('userGreeting').textContent = currentUser?.name || '';
+    if (currentUser?.role === 'admin') $('roleBadge').classList.remove('hidden');
+    fetchStats();
+    fetchTasks();
+  }
+
+  async function fetchStats() {
+    try {
+      const res = await apiFetch('/tasks/stats');
+      if (!res || !res.ok) return;
+      const { stats } = await res.json();
+      $('statsRow').innerHTML = [
+        { label: 'Total',       value: stats.total,       color: 'text-slate-300' },
+        { label: 'Pending',     value: stats.pending,     color: 'text-blue-400' },
+        { label: 'In Progress', value: stats.in_progress, color: 'text-amber-400' },
+        { label: 'Completed',   value: stats.completed,   color: 'text-emerald-400' },
+      ].map(s => `
+        <div class="glass rounded-xl p-4">
+          <div class="text-2xl font-bold ${s.color}">${s.value}</div>
+          <div class="text-xs text-slate-500 mt-1">${s.label}</div>
+        </div>`).join('');
+    } catch {}
+  }
+
+  async function fetchTasks() {
+    const search   = $('searchInput').value;
+    const status   = $('filterStatus').value;
+    const priority = $('filterPriority').value;
+
+    const params = new URLSearchParams({ page: currentPage, limit: 10 });
+    if (search)   params.set('search',   search);
+    if (status)   params.set('status',   status);
+    if (priority) params.set('priority', priority);
+
+    try {
+      const res = await apiFetch(`/tasks?${params}`);
+      if (!res || !res.ok) return;
+      const data = await res.json();
+      renderTasks(data.tasks);
+      renderPagination(data.pagination);
+    } catch { toast('Failed to load tasks', 'error'); }
+  }
+
+  function debouncedFetch() {
+    clearTimeout(debounceTimer);
+    currentPage = 1;
+    debounceTimer = setTimeout(fetchTasks, 350);
+  }
+
+  function renderTasks(tasks) {
+    if (!tasks.length) {
+      $('taskList').innerHTML = `
+        <div class="glass rounded-xl p-10 text-center text-slate-500">
+          <div class="text-4xl mb-3">📋</div>
+          <div>No tasks found. Create your first task!</div>
+        </div>`;
+      return;
+    }
+    $('taskList').innerHTML = tasks.map(t => `
+      <div class="glass rounded-xl p-4 flex items-start gap-4 hover:border-slate-600 transition-colors group">
+        <button onclick="quickComplete('${t.id}', '${t.status}')"
+          class="mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 transition-colors
+            ${t.status === 'completed'
+              ? 'bg-emerald-500 border-emerald-500'
+              : 'border-slate-600 hover:border-emerald-500'}"
+          title="${t.status === 'completed' ? 'Mark pending' : 'Mark complete'}">
+          ${t.status === 'completed' ? '<svg class="w-3 h-3 text-white m-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>' : ''}
+        </button>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-start justify-between gap-2 flex-wrap">
+            <h3 class="font-medium text-white ${t.status === 'completed' ? 'line-through text-slate-500' : ''}">${escHtml(t.title)}</h3>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <span class="px-2 py-0.5 rounded text-xs font-medium badge-${t.status}">${t.status.replace('_',' ')}</span>
+              <span class="px-2 py-0.5 rounded text-xs font-medium badge-${t.priority}">${t.priority}</span>
+            </div>
+          </div>
+          ${t.description ? `<p class="text-sm text-slate-400 mt-1 truncate">${escHtml(t.description)}</p>` : ''}
+          <div class="flex items-center gap-4 mt-2 text-xs text-slate-500">
+            ${t.due_date ? `<span>📅 ${new Date(t.due_date).toLocaleDateString()}</span>` : ''}
+            <span>Created ${new Date(t.created_at).toLocaleDateString()}</span>
+            ${currentUser?.role === 'admin' && t.owner_name ? `<span>👤 ${escHtml(t.owner_name)}</span>` : ''}
+          </div>
+        </div>
+        <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          <button onclick="openEditModal(${JSON.stringify(t).replace(/"/g, '&quot;')})"
+            class="p-1.5 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-white transition-colors" title="Edit">
+            ✏️
+          </button>
+          <button onclick="deleteTask('${t.id}')"
+            class="p-1.5 rounded-lg hover:bg-rose-900 text-slate-400 hover:text-rose-400 transition-colors" title="Delete">
+            🗑️
+          </button>
+        </div>
+      </div>`).join('');
+  }
+
+  function renderPagination(p) {
+    totalPages = p.totalPages;
+    const pag = $('pagination');
+    if (p.totalPages <= 1) { pag.classList.add('hidden'); return; }
+    pag.classList.remove('hidden');
+    $('paginationInfo').textContent = `Page ${p.page} of ${p.totalPages} (${p.total} tasks)`;
+    $('prevBtn').disabled = p.page <= 1;
+    $('nextBtn').disabled = p.page >= p.totalPages;
+  }
+
+  function changePage(dir) {
+    currentPage = Math.max(1, Math.min(totalPages, currentPage + dir));
+    fetchTasks();
+  }
+
+  function openModal() {
+    $('modalTitle').textContent   = 'New Task';
+    $('taskSubmitBtn').textContent = 'Create Task';
+    $('taskId').value     = '';
+    $('taskTitle').value  = '';
+    $('taskDesc').value   = '';
+    $('taskStatus').value   = 'pending';
+    $('taskPriority').value = 'medium';
+    $('taskDueDate').value  = '';
+    $('taskModal').classList.remove('hidden');
+    $('taskTitle').focus();
+  }
+
+  function openEditModal(task) {
+    $('modalTitle').textContent    = 'Edit Task';
+    $('taskSubmitBtn').textContent = 'Save Changes';
+    $('taskId').value     = task.id;
+    $('taskTitle').value  = task.title;
+    $('taskDesc').value   = task.description || '';
+    $('taskStatus').value   = task.status;
+    $('taskPriority').value = task.priority;
+    $('taskDueDate').value  = task.due_date ? task.due_date.split('T')[0] : '';
+    $('taskModal').classList.remove('hidden');
+  }
+
+  function closeModal() {
+    $('taskModal').classList.add('hidden');
+  }
+
+  async function handleTaskSubmit(e) {
+    e.preventDefault();
+    const id = $('taskId').value;
+    const payload = {
+      title:       $('taskTitle').value.trim(),
+      description: $('taskDesc').value.trim(),
+      status:      $('taskStatus').value,
+      priority:    $('taskPriority').value,
+      due_date:    $('taskDueDate').value || undefined,
+    };
+
+    try {
+      const res = await apiFetch(
+        id ? `/tasks/${id}` : '/tasks',
+        { method: id ? 'PATCH' : 'POST', body: JSON.stringify(payload) },
+      );
+      if (!res || !res.ok) {
+        const data = await res.json();
+        return toast(data.message || 'Failed to save task', 'error');
+      }
+      toast(id ? 'Task updated!' : 'Task created!');
+      closeModal();
+      fetchTasks();
+      fetchStats();
+    } catch { toast('Network error', 'error'); }
+  }
+
+  async function quickComplete(id, currentStatus) {
+    const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
+    try {
+      const res = await apiFetch(`/tasks/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res && res.ok) { fetchTasks(); fetchStats(); }
+    } catch {}
+  }
+
+  async function deleteTask(id) {
+    if (!confirm('Delete this task?')) return;
+    try {
+      const res = await apiFetch(`/tasks/${id}`, { method: 'DELETE' });
+      if (!res || !res.ok) return toast('Failed to delete task', 'error');
+      toast('Task deleted');
+      fetchTasks();
+      fetchStats();
+    } catch { toast('Network error', 'error'); }
+  }
+
+  function escHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  if (accessToken && currentUser) {
+    showDashboard();
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+  });
+</script>
+</body>
+</html>
