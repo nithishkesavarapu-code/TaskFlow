@@ -295,7 +295,3 @@ See **[SCALABILITY.md](./SCALABILITY.md)** for a detailed breakdown of:
 - Kubernetes / ECS deployment blueprint
 
 ---
-
-## License
-
-MIT
